@@ -58,12 +58,12 @@ def rewrite_query(user_input_json, conversation_history, ollama_model):
         messages=[{"role": "system", "content": prompt}],
         max_tokens=200,
         n=1,
-        temperature=0.1,
+        temperature=os.getenv("TEMPERATURE"),
     )
     rewritten_query = response.choices[0].message.content.strip()
     return json.dumps({"Rewritten Query": rewritten_query})
    
-def ollama_chat(user_input, system_message, vault_embeddings, vault_content, ollama_model, conversation_history):
+def ollama_chat(user_input, system_message, vault_embeddings, vault_content, ollama_model, conversation_history, use_rag):
     conversation_history.append({"role": "user", "content": user_input})
     
     if len(conversation_history) > 1:
@@ -79,7 +79,10 @@ def ollama_chat(user_input, system_message, vault_embeddings, vault_content, oll
     else:
         rewritten_query = user_input
     
-    relevant_context = get_relevant_context(rewritten_query, vault_embeddings, vault_content)
+    relevant_context = []
+    if use_rag:
+        relevant_context = get_relevant_context(rewritten_query, vault_embeddings, vault_content)
+    
     if relevant_context:
         context_str = "\n".join(relevant_context)
         print("Context Pulled from Documents: \n\n" + CYAN + context_str + RESET_COLOR)
@@ -87,7 +90,7 @@ def ollama_chat(user_input, system_message, vault_embeddings, vault_content, oll
         print(CYAN + "No relevant context found." + RESET_COLOR)
     
     user_input_with_context = user_input
-    if relevant_context:
+    if use_rag and relevant_context:
         user_input_with_context = user_input + "\n\nRelevant Context:\n" + context_str
     
     conversation_history[-1]["content"] = user_input_with_context
@@ -111,6 +114,7 @@ def ollama_chat(user_input, system_message, vault_embeddings, vault_content, oll
 print(NEON_GREEN + "Parsing command-line arguments..." + RESET_COLOR)
 parser = argparse.ArgumentParser(description="Ollama Chat")
 parser.add_argument("--model", default="llama3", help="Ollama model to use (default: llama3)")
+parser.add_argument("--use_rag", action="store_true", help="Enable RAG (Retrieval-Augmented Generation)")
 args = parser.parse_args()
 
 # Configuration for the Ollama API client
@@ -150,5 +154,5 @@ while True:
     if user_input.lower() == 'quit':
         break
     
-    response = ollama_chat(user_input, system_message, vault_embeddings_tensor, vault_content, args.model, conversation_history)
+    response = ollama_chat(user_input, system_message, vault_embeddings_tensor, vault_content, args.model, conversation_history, args.use_rag)
     print(NEON_GREEN + "Response: \n\n" + response + RESET_COLOR)
